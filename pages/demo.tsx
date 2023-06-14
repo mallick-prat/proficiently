@@ -9,15 +9,9 @@ import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
 const questions = [
   {
     id: 1,
-    name: "Case Interview",
-    description: "McKinsey, BCG, Bain Style Case Interviews",
+    name: "MBB Behavioral Interview",
+    description: "McKinsey, BCG, Bain Style Behavioral Interview",
     difficulty: "Medium",
-  },
-  {
-    id: 2,
-    name: "Investment Banking Technical",
-    description: "From Morgan Stanely, Lazard, and Evercore",
-    difficulty: "Easy",
   },
 ];
 
@@ -25,7 +19,7 @@ const interviewers = [
   {
     id: "Unicloth 👚",
     name: "Unicloth 👚",
-    description: "Profitability",
+    description: "DEMO - Consulting Style Behavioral Question Only",
     level: "L3",
   },
 ];
@@ -181,7 +175,7 @@ export default function DemoPage() {
       formData.append("model", "whisper-1");
 
       const question =
-        selected.name === "Case Interview"
+        selected.name === "MBB Behavioral Interview"
           ? `Hi there! Tell me about yourself and you walk me through your resume?`
           : selectedInterviewer.name === "Unicloth 👚"
           ? "What is a Hash Table, and what is the average case and worst case time for each of its operations?"
@@ -223,7 +217,7 @@ export default function DemoPage() {
           const prompt = `Please give feedback on the following interview question: ${question} given the following transcript: ${
             results.transcript
           }. ${
-            selected.name === "Case Interview"
+            selected.name === "MBB Behavioral Interview"
               ? "Please also give feedback on the candidate's communication skills. Make sure their response is structured (perhaps using the STAR or PAR frameworks)."
               : "Please also give feedback on the candidate's communication skills. Make sure they accurately explain their thoughts in a coherent way. Make sure they stay on topic and relevant to the question."
           } \n\n\ Feedback on the candidate's response:`;
@@ -416,7 +410,7 @@ export default function DemoPage() {
               {recordingPermission ? (
                 <div className="w-full flex flex-col max-w-[1080px] mx-auto justify-center">
                   <h2 className="text-2xl font-semibold text-left text-[#1D2B3A] mb-2">
-                    {selected.name === "Case Interview"
+                    {selected.name === "MBB Behavioral Interview"
                       ? `Hi there! Tell me about yourself and you walk me through your resume.`
                       : selectedInterviewer.name === "Unicloth 👚"
                       ? "What is a Hash Table, and what is the average case and worst case time for each of its operations?"
@@ -481,18 +475,18 @@ export default function DemoPage() {
                               <source
                                 src={
                                   selectedInterviewer.name === "Unicloth 👚"
-                                    ? selected.name === "Case Interview"
+                                    ? selected.name === "MBB Behavioral Interview"
                                       ? "https://liftoff-public.s3.amazonaws.com/DemoInterviewMale.mp4"
                                       : "https://liftoff-public.s3.amazonaws.com/JohnTechnical.mp4"
                                     : selectedInterviewer.name === "Snack Foods Acquisition 🍎"
-                                    ? selected.name === "Case Interview"
+                                    ? selected.name === "MBB Behavioral Interview"
                                       ? "https://liftoff-public.s3.amazonaws.com/RichardCase Interview.mp4"
                                       : "https://liftoff-public.s3.amazonaws.com/RichardTechnical.mp4"
                                     : selectedInterviewer.name === "Brazilian Highway Concessions 🚦"
-                                    ? selected.name === "Case Interview"
+                                    ? selected.name === "MBB Behavioral Interview"
                                       ? "https://liftoff-public.s3.amazonaws.com/Case InterviewSarah.mp4"
                                       : "https://liftoff-public.s3.amazonaws.com/SarahTechnical.mp4"
-                                    : selected.name === "Case Interview"
+                                    : selected.name === "MBB Behavioral Interview"
                                     ? "https://liftoff-public.s3.amazonaws.com/DemoInterviewMale.mp4"
                                     : "https://liftoff-public.s3.amazonaws.com/JohnTechnical.mp4"
                                 }
