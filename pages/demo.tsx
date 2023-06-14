@@ -176,7 +176,7 @@ export default function DemoPage() {
 
       const question =
         selected.name === "MBB Behavioral Interview"
-          ? `Hi there! Tell me about yourself and you walk me through your resume?`
+          ? `Hi there! Tell me about yourself and walk me through your resume?`
           : selectedInterviewer.name === "Unicloth 👚"
           ? "What is a Hash Table, and what is the average case and worst case time for each of its operations?"
           : selectedInterviewer.name === "Snack Foods Acquisition 🍎"
