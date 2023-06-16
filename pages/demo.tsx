@@ -175,13 +175,12 @@ export default function DemoPage() {
       formData.append("model", "whisper-1");
 
       const question =
-        selected.name === "MBB Behavioral Interview"
-          ? `Hi there! Tell me about yourself and walk me through your resume?`
-          : selectedInterviewer.name === "Unicloth 👚"
-          ? "What is a Hash Table, and what is the average case and worst case time for each of its operations?"
-          : selectedInterviewer.name === "Snack Foods Acquisition 🍎"
-          ? "Uber is looking to expand its product line. Talk me through how you would approach this problem."
-          : "You have a 3-gallon jug and 5-gallon jug, how do you measure out exactly 4 gallons?";
+      selected.name === "MBB Behavioral Interview"
+        ? `Hi there! Tell me about yourself and walk me through your resume?`
+        : selected.name === "Unicloth 👚"
+        ? "Unicloth, a popular clothing retailer, is facing declining sales in their physical stores while experiencing a surge in online competition. As a consultant, how would you advise Unicloth to adapt their business strategy to thrive in the digital era and maintain a strong market position?"
+        : "How many customers does Unicloth currently serve?";
+    
 
       setStatus("Transcribing");
 
@@ -411,12 +410,10 @@ export default function DemoPage() {
                 <div className="w-full flex flex-col max-w-[1080px] mx-auto justify-center">
                   <h2 className="text-2xl font-semibold text-left text-[#1D2B3A] mb-2">
                     {selected.name === "MBB Behavioral Interview"
-                      ? `Hi there! Tell me about yourself and you walk me through your resume.`
-                      : selectedInterviewer.name === "Unicloth 👚"
-                      ? "What is a Hash Table, and what is the average case and worst case time for each of its operations?"
-                      : selectedInterviewer.name === "Snack Foods Acquisition 🍎"
-                      ? "Uber is looking to expand its product line. Talk me through how you would approach this problem."
-                      : "You have a 3-gallon jug and 5-gallon jug, how do you measure out exactly 4 gallons?"}
+            ? `Hi there! Tell me about yourself and walk me through your resume?`
+            : selected.name === "Unicloth 👚"
+            ? "Unicloth, a popular clothing retailer, is facing declining sales in their physical stores while experiencing a surge in online competition. As a consultant, how would you advise Unicloth to adapt their business strategy to thrive in the digital era and maintain a strong market position?"
+            : "How many customers does Unicloth currently serve?"}
                   </h2>
                   <span className="text-[14px] leading-[20px] text-[#1a2b3b] font-normal mb-4">
                     Sample MBB style Behavioral Question
