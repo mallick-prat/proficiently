@@ -67,11 +67,12 @@ const { getRootProps, getInputProps } = useDropzone({
   const canGenerateResume = isUploaded && selectedRole !== "Role" && !uploadError;
 
   return (
-    <div className="flex flex-col items-center justify-center bg-[#FAF2D2] rounded-lg border-2 border-black p-10 md:px-20 md:py-16 lg:px-28 lg:py-24">
+<div className="flex flex-col items-center justify-center bg-[#FAF2D2] rounded-lg border-2 border-black p-10 md:px-20 md:py-16 lg:px-28 lg:py-24">
 
-      <h1 className="text-2xl sm:text-4xl md:text-6xl font-bold py-10 text-center">Upload Your Resume</h1>
+<h1 className="text-2xl sm:text-4xl md:text-6xl font-bold py-10 text-center">Upload Your Resume</h1>
 
-      <div className="flex flex-col items-center justify-center bg-white rounded-lg border-2 border-black p-6 sm:p-8 md:p-10 lg:p-12 xl:p-16">
+<div className="flex flex-col items-center justify-center bg-white rounded-lg border-2 border-black p-6 sm:p-8 md:p-10 lg:p-12 xl:p-16 mx-2 sm:mx-8 max-w-screen-md">
+  
       
       <div className="w-full h-2  mb-2 rounded-full">
       <div className={`h-full text-xs text-center text-white ${progressBarColor} rounded-full`} style={{ width: `${uploadProgress}%` }}></div>
@@ -144,13 +145,12 @@ const { getRootProps, getInputProps } = useDropzone({
             <input {...getInputProps()} id="dropzone-file" type="file" className="hidden" accept={acceptedFileTypes.join(',')} />
           </div>
         </div>
-
-        <div className="relative inline-block w-full md:w-auto">
-  <button
+        <div className="relative w-full md:w-auto flex justify-center">
+        <button
     onClick={() => setIsOpen(!isOpen)}
-    className="relative justify-left inline-block px-4 py-2 font-medium group m-4 w-50 bg-[#FAF2D2] rounded-lg"
+    className="relative justify-left inline-block px-4 py-2 font-medium group m-2 w-full sm:w-60 bg-[#FAF2D2] rounded-lg"
     tabIndex={0} 
-    style={{ width: '400px' }}
+    style={{ maxWidth: '350px' }}
   >
 
             <span className="absolute inset-0 w-full h-full transition duration-200 ease-out transform translate-x-1 translate-y-1 bg-black group-hover:-translate-x-0 group-hover:-translate-y-0"></span>
@@ -211,11 +211,11 @@ const { getRootProps, getInputProps } = useDropzone({
           )}
         </AnimatePresence>
         <motion.button 
-          className="text-2xl md:text-3xl mt-4 left-1/2 p-2" 
-          onClick={() => setDocumentType("Resume")}
-          whileHover={{ x: [3, -5, 3, -5, 3] }}
-          transition={{ duration:2, repeat: Infinity, repeatType: "loop" }}
-        >
+  className="text-2xl md:text-3xl mt-4 left-1/2 p-2" 
+  onClick={() => setDocumentType("Resume")}
+  whileHover={{ x: [3, -5, 3, -5, 3] }}
+  transition={{ duration:2, repeat: Infinity, repeatType: "loop" }}
+>
   &#8592;
 </motion.button>
         
