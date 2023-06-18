@@ -10,7 +10,7 @@ export default function RefineryPage() {
     const [documentType, setDocumentType] = useState("");
     const documentTypes = ["Resume", "Cover Letter"];
     const resumeOptions = ["Get Resume Edits", "Create Resume from Template", "Create Resume with LinkedIn", "Create Resume from Scratch"];
-    const buttonStyle = "relative inline-block px-4 py-2 font-medium group m-2 w-50 bg-[#FAF2D2] rounded-lg";
+    const buttonStyle = "relative inline-block px-4 py-2 font-medium group m-2 w-full md:w-50 bg-[#FAF2D2] rounded-lg";
   
     const backButton = (
         <div className="flex items-center cursor-pointer text-white hover:text-gray-300 transition-all" onClick={() => setDocumentType("")}>
@@ -23,12 +23,6 @@ export default function RefineryPage() {
 
       return (
         <div className="min-h-[100vh] w-screen flex flex-col items-start justify-center relative bg-[#FAF2D2] font-inter overflow-hidden">
-          {documentType !== "" && (
-            <button className="text-2xl md:text-3xl absolute left-5 top-5" onClick={() => setDocumentType("")}>
-              &#8592;
-            </button>
-          )}
-    
           <div className="flex flex-col items-center w-full justify-center flex-grow">
             <AnimatePresence>
               {documentType === "" && (
@@ -46,7 +40,7 @@ export default function RefineryPage() {
                       key={type}
                       className={buttonStyle}
                       onClick={() => setDocumentType(type)}
-                      style={{ width: '200px' }}
+                      style={{ width: '100%', maxWidth: '200px' }}
                       disabled={type === "Cover Letter"}
                       initial={{ opacity: 0, scale: 0 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -74,7 +68,7 @@ export default function RefineryPage() {
                     <motion.button
                       key={option}
                       className={buttonStyle}
-                      style={{ width: '400px' }}
+                      style={{ width: '100%', maxWidth: '400px' }}
                       onClick={() => setDocumentType(option)}
                       disabled={option === "Create Resume from Template" || option === "Create Resume with LinkedIn" || option === "Create Resume from Scratch"}
                       whileHover={{ scale: 1.1 }}
@@ -88,7 +82,20 @@ export default function RefineryPage() {
                       <span className="relative text-black group-hover:text-white">{option}</span>
                     </motion.button>
                   ))}
+
+
+
+                          <motion.button 
+className="text-2xl md:text-3xl mt-4 left-1/2 p-2"
+  onClick={() => setDocumentType("")}
+  whileHover={{ x: [3, -5, 3, -5, 3] }}
+  transition={{ duration:2, repeat: Infinity, repeatType: "loop" }}
+>
+  &#8592;
+</motion.button>
                 </motion.div>
+                
+                
               )}
     
               {documentType === "Get Resume Edits" && <UploadResumePage setDocumentType={setDocumentType} />}

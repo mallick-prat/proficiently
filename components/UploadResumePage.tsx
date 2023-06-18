@@ -60,13 +60,11 @@ const UploadResumePage = ({ setDocumentType }: UploadResumePageProps) => {
     }
   });
 
-  const canGenerateResume = isUploaded && selectedRole !== "Role";
+  const canGenerateResume = isUploaded && selectedRole !== "Role" && !uploadError;
 
   return (
     <div className="flex flex-col items-center justify-center bg-[#FAF2D2] rounded-lg border-2 border-black p-10">
-      <button className="text-2xl md:text-3xl absolute left-5 top-5" onClick={() => setDocumentType("Resume")}>
-        &#8592;
-      </button>
+
 
       <h1 className="text-4xl md:text-6xl font-bold py-10 text-center">Upload Your Resume</h1>
 
@@ -76,20 +74,22 @@ const UploadResumePage = ({ setDocumentType }: UploadResumePageProps) => {
     </div>
         <div className="flex items-center justify-center w-full">
           <div {...getRootProps()} className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-bray-800 dark:bg-gray-100 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-200 dark:hover:bg-gray-300">
-            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+          <div className="flex flex-col items-center justify-center pt-5 pb-6">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
   <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
 </svg>
 
 
 
-              {uploadedFile ? (
+
+              
+{uploadedFile ? (
   <>
 {!uploadError ? (
   <motion.div
     initial={{ opacity: 0, y: -50 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: 1 }} // delay the animation until the progress bar is filled
+    transition={{ delay: .5 }} // delay the animation until the progress bar is filled
   >
     <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
       <span className="font-semibold">{uploadedFile.name}</span>
@@ -115,7 +115,6 @@ const UploadResumePage = ({ setDocumentType }: UploadResumePageProps) => {
     </p>
   </motion.div>
 )}
-
   </>
 ) : (
   <>
@@ -123,6 +122,17 @@ const UploadResumePage = ({ setDocumentType }: UploadResumePageProps) => {
       <span className="font-semibold">Click to upload</span> or drag and drop<span className="text-red-500">*</span>
     </p>
     <p className="text-xs text-gray-500 dark:text-gray-400">PDF, DOCX, DOC, TXT</p>
+    {uploadError && (
+      <motion.div
+        initial={{ opacity: 0, y: -50 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+      >
+        <p className="text-xs text-red-600 dark:text-red-800">
+          {uploadError}
+        </p>
+      </motion.div>
+    )}
   </>
 )}
 
@@ -199,6 +209,15 @@ const UploadResumePage = ({ setDocumentType }: UploadResumePageProps) => {
             </motion.button>
           )}
         </AnimatePresence>
+        <motion.button 
+  className="text-2xl md:text-3xl mt-4 left-1/2 p-2" 
+  onClick={() => setDocumentType("Resume")}
+  whileHover={{ x: [3, -5, 3, -5, 3] }}
+  transition={{ duration:2, repeat: Infinity, repeatType: "loop" }}
+>
+  &#8592;
+</motion.button>
+        
       </div>
     </div>
   );
