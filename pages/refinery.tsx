@@ -9,7 +9,7 @@ export default function RefineryPage() {
     const router = useRouter();
     const [documentType, setDocumentType] = useState("");
     const documentTypes = ["Resume", "Cover Letter"];
-    const resumeOptions = ["Upload Your Resume", "Create Resume from Template", "Import Resume from LinkedIn", "Create Resume from Scratch"];
+    const resumeOptions = ["Get Resume Edits", "Create Resume from Template", "Create Resume with LinkedIn", "Create Resume from Scratch"];
     const buttonStyle = "relative inline-block px-4 py-2 font-medium group m-2 w-50 bg-[#FAF2D2] rounded-lg";
   
     const backButton = (
@@ -76,7 +76,7 @@ export default function RefineryPage() {
                       className={buttonStyle}
                       style={{ width: '400px' }}
                       onClick={() => setDocumentType(option)}
-                      disabled={option === "Create Resume from Template" || option === "Import Resume from LinkedIn" || option === "Create Resume from Scratch"}
+                      disabled={option === "Create Resume from Template" || option === "Create Resume with LinkedIn" || option === "Create Resume from Scratch"}
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.95 }}
                       initial={{ opacity: 0, y: -i * 20 }}
@@ -91,7 +91,7 @@ export default function RefineryPage() {
                 </motion.div>
               )}
     
-              {documentType === "Upload Your Resume" && <UploadResumePage setDocumentType={setDocumentType} />}
+              {documentType === "Get Resume Edits" && <UploadResumePage setDocumentType={setDocumentType} />}
               
             </AnimatePresence>
           </div>
