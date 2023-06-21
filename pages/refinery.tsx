@@ -1,10 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { AnimatePresence } from "framer-motion";
 import { useRouter } from "next/router";
-import UploadResumePage from "../components/UploadResumePage";
+import UploadBox, { downloadUrl, file } from "@/components//uploadBox";
 
 export default function RefineryPage() {
+  const [file, setFile] = useState<File | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState("");
+
+  const handleFileUpload = (uploadedFile: File, url: string) => {
+    setFile(uploadedFile);
+    setDownloadUrl(url);
+  };
+
   const router = useRouter();
   const [documentType, setDocumentType] = useState("");
   const documentTypes = ["Resume", "Cover Letter"];
@@ -26,13 +34,13 @@ export default function RefineryPage() {
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
-        stroke-width="1.5"
+        strokeWidth="1.5"
         stroke="currentColor"
         className="w-6 h-6"
       >
         <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
+          strokeLinecap="round"
+          strokeLinejoin="round"
           d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"
         />
       </svg>
@@ -127,7 +135,92 @@ export default function RefineryPage() {
           )}
 
           {documentType === "Get Resume Edits" && (
-            <UploadResumePage setDocumentType={setDocumentType} />
+            <div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  delay: 0.5,
+                  duration: 0.15,
+                  ease: [0.23, 1, 0.82, 1],
+                }}
+                className="flex flex-col items-center justify-center bg-white rounded-lg border-2 border-black p-10 pb-4"
+              >
+                <UploadBox onFileUpload={handleFileUpload} />
+
+                <motion.button
+                  key="generate-resume-edits"
+                  className="relative inline-block px-4 py-2 group m-2 w-full md:w-50 bg-[#FAF2D2] rounded-lg"
+                  onClick={() => {
+                    if (file) {
+                      setDocumentType("Edits");
+                    } else {
+                      // Display an error message or perform any other action you want
+                      console.log("Please upload a file before generating edits");
+                    }
+                  }}
+                  style={{ width: "100%", maxWidth: "200px" }}
+                  initial={{ opacity: 0, scale: 0 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0 }}
+                >
+                  <span className="absolute inset-0 w-full h-full transition duration-200 ease-out transform translate-x-1 translate-y-1 bg-black group-hover:-translate-x-0 group-hover:-translate-y-0"></span>
+                  <span className="absolute inset-0 w-full h-full bg-[#FAF2D2] border-2 border-black group-hover:bg-black"></span>
+                  <span className="relative text-black group-hover:text-white">
+                  Generate Edits{!file && <span className="text-red-500">*</span>}
+                  </span>
+                </motion.button>
+
+                <motion.button
+                  className="text-2xl md:text-3xl left-1/2"
+                  onClick={() => setDocumentType("Resume")}
+                  whileHover={{ x: [3, -5, 3, -5, 3] }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    repeatType: "loop",
+                  }}
+                >
+                  &#8592;
+                </motion.button>
+              </motion.div>
+            </div>
+          )}
+
+          {documentType === "Edits" && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                delay: 0.5,
+                duration: 0.15,
+                ease: [0.23, 1, 0.82, 1],
+              }}
+              className="flex flex-col items-center justify-center bg-white rounded-lg border-2 border-black p-10"
+            >
+              {file && (
+                <div>
+                  <p>Uploaded File: {file.name}</p>
+                  {downloadUrl && (
+                    <a href={downloadUrl} download={file.name}>
+                      Download Resume
+                    </a>
+                  )}
+                </div>
+              )}
+              <motion.button
+                  className="text-2xl md:text-3xl left-1/2"
+                  onClick={() => setDocumentType("Get Resume Edits")}
+                  whileHover={{ x: [3, -5, 3, -5, 3] }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    repeatType: "loop",
+                  }}
+                >
+                  &#8592;
+                </motion.button>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
