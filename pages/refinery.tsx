@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { AnimatePresence } from "framer-motion";
 import { useRouter } from "next/router";
 import UploadBox, { downloadUrl, file } from "@/components//uploadBox";
+import ResumeGenerator from "@/components/resumeGenerator";
 
 export default function RefineryPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -18,9 +19,8 @@ export default function RefineryPage() {
   const documentTypes = ["Resume", "Cover Letter"];
   const resumeOptions = [
     "Get Resume Edits",
-    "Create Resume from Template",
-    "Create Resume with LinkedIn",
     "Create Resume from Scratch",
+    "Create Resume with LinkedIn",
   ];
   const buttonStyle =
     "relative inline-block px-4 py-2 font-medium group m-2 w-full md:w-50 bg-[#FAF2D2] rounded-lg";
@@ -100,11 +100,6 @@ export default function RefineryPage() {
                   className={buttonStyle}
                   style={{ width: "100%", maxWidth: "400px" }}
                   onClick={() => setDocumentType(option)}
-                  disabled={
-                    option === "Create Resume from Template" ||
-                    option === "Create Resume with LinkedIn" ||
-                    option === "Create Resume from Scratch"
-                  }
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
                   initial={{ opacity: 0, y: -i * 20 }}
@@ -186,6 +181,57 @@ export default function RefineryPage() {
               </motion.div>
             </div>
           )}
+
+
+          {documentType === "Create Resume from Scratch" && (
+            <div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  delay: 0.5,
+                  duration: 0.15,
+                  ease: [0.23, 1, 0.82, 1],
+                }}
+                className="flex flex-col items-center justify-center bg-white rounded-lg border-2 border-black p-10 pb-4"
+              >
+                <ResumeGenerator/>
+
+                <motion.button
+                  className="text-2xl md:text-3xl left-1/2"
+                  onClick={() => setDocumentType("Resume")}
+                  whileHover={{ x: [3, -5, 3, -5, 3] }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    repeatType: "loop",
+                  }}
+                >
+                  &#8592;
+                </motion.button>
+              </motion.div>
+            </div>
+          )}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
           {documentType === "Edits" && (
             <motion.div
