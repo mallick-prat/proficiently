@@ -34,6 +34,7 @@
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-dropzone": "^14.2.3",
+    "react-google-autocomplete": "^2.7.3",
     "react-hook-form": "^7.44.3",
     "react-progressbar": "^15.4.1",
     "react-webcam": "^7.0.1",
