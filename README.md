@@ -6,3 +6,9 @@
 <p align="center">
   IB & Consulting Prep on Demand
 </p
+
+
+<p align="center">
+ - run app.py file for Flask backend
+ - run npm run dev
+</p

@@ -8,10 +8,39 @@ import ResumeGenerator from "@/components/resumeGenerator";
 export default function RefineryPage() {
   const [file, setFile] = useState<File | null>(null);
   const [downloadUrl, setDownloadUrl] = useState("");
+  const [data, setData] = useState(null);
+
+  // jsonData.content contains the text of the resume
+  const parsePDF = async (file: File) => {
+    try {
+      let data = new FormData();
+      data.append('pdf', file);
+
+      let response = await fetch('http://localhost:5000/api/parsePDF', {
+        method: 'post',
+        body: data,
+      });
+
+      const jsonData = await response.json();
+      if (jsonData.status === 0) {
+        alert("There was an error processing your pdf file. Please try again.")
+        return;
+      }
+      setData(jsonData);
+      // TODO: do stuff with the parsed text and display it on frontend
+      //  more specifically, if "Get Resume Edits" is pressed --> prompt GPT for edits and display them
+      //                     if "Create Resume from Scratch" is pressed --> generate resume with GPT...
+    } catch (error) {
+      console.log('Error:', error);
+      // display error message to user
+      alert("There was an error processing your pdf file. Please try again.")
+    }
+  };
 
   const handleFileUpload = (uploadedFile: File, url: string) => {
     setFile(uploadedFile);
     setDownloadUrl(url);
+    parsePDF(uploadedFile);
   };
 
   const router = useRouter();
@@ -162,7 +191,7 @@ export default function RefineryPage() {
                   <span className="absolute inset-0 w-full h-full transition duration-200 ease-out transform translate-x-1 translate-y-1 bg-black group-hover:-translate-x-0 group-hover:-translate-y-0"></span>
                   <span className="absolute inset-0 w-full h-full bg-[#FAF2D2] border-2 border-black group-hover:bg-black"></span>
                   <span className="relative text-black group-hover:text-white">
-                  Generate Edits{!file && <span className="text-red-500">*</span>}
+                    Generate Edits{!file && <span className="text-red-500">*</span>}
                   </span>
                 </motion.button>
 
@@ -195,7 +224,7 @@ export default function RefineryPage() {
                 }}
                 className="flex flex-col items-center justify-center bg-white rounded-lg border-2 border-black p-10 pb-4"
               >
-                <ResumeGenerator/>
+                <ResumeGenerator />
 
                 <motion.button
                   className="text-2xl md:text-3xl left-1/2"
@@ -255,17 +284,17 @@ export default function RefineryPage() {
                 </div>
               )}
               <motion.button
-                  className="text-2xl md:text-3xl left-1/2"
-                  onClick={() => setDocumentType("Get Resume Edits")}
-                  whileHover={{ x: [3, -5, 3, -5, 3] }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                    repeatType: "loop",
-                  }}
-                >
-                  &#8592;
-                </motion.button>
+                className="text-2xl md:text-3xl left-1/2"
+                onClick={() => setDocumentType("Get Resume Edits")}
+                whileHover={{ x: [3, -5, 3, -5, 3] }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  repeatType: "loop",
+                }}
+              >
+                &#8592;
+              </motion.button>
             </motion.div>
           )}
         </AnimatePresence>
