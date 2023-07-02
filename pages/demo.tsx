@@ -1,1312 +1,227 @@
-import { AnimatePresence, motion } from "framer-motion";
-import { RadioGroup } from "@headlessui/react";
-import { v4 as uuid } from "uuid";
-import Link from "next/link";
-import { useRef, useState, useEffect, useCallback } from "react";
-import Webcam from "react-webcam";
-import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
+import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import axios from "axios";
+import Message from "../components/Demo/messages.jsx";
+import { Configuration, OpenAIApi } from "openai";
+import SpeechRecognition, { useSpeechRecognition } from "react-speech-recognition";
 
-const questions = [
-  {
-    id: 1,
-    name: "MBB Behavioral Interview",
-    description: "McKinsey, BCG, Bain Style Behavioral Interview",
-    difficulty: "Medium",
-  },
-];
+let inactivityTimer: NodeJS.Timeout | number | undefined;
 
-const interviewers = [
-  {
-    id: "Unicloth 👚",
-    name: "Unicloth 👚",
-    description: "DEMO - Consulting Style Behavioral Question Only",
-    level: "L3",
-  },
-];
-
-const ffmpeg = createFFmpeg({
-  // corePath: `http://localhost:3000/ffmpeg/dist/ffmpeg-core.js`,
-  // I've included a default import above (and files in the public directory), but you can also use a CDN like this:
-  corePath: "https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js",
-  log: true,
+const configuration = new Configuration({
+  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
 });
-
-function classNames(...classes: string[]) {
-  return classes.filter(Boolean).join(" ");
-}
+const openai = new OpenAIApi(configuration);
 
 export default function DemoPage() {
-  const [selected, setSelected] = useState(questions[0]);
-  const [selectedInterviewer, setSelectedInterviewer] = useState(
-    interviewers[0]
-  );
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const webcamRef = useRef<Webcam | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const [capturing, setCapturing] = useState(false);
-  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
-  const [seconds, setSeconds] = useState(150);
-  const [videoEnded, setVideoEnded] = useState(false);
-  const [recordingPermission, setRecordingPermission] = useState(true);
-  const [cameraLoaded, setCameraLoaded] = useState(false);
-  const vidRef = useRef<HTMLVideoElement>(null);
-  const [isSubmitting, setSubmitting] = useState(false);
-  const [status, setStatus] = useState("Processing");
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [isVisible, setIsVisible] = useState(true);
-  const [isDesktop, setIsDesktop] = useState(false);
-  const [completed, setCompleted] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [generatedFeedback, setGeneratedFeedback] = useState("");
+  const [messageText, setMessageText] = useState("");
+  const [messages, setMessages] = useState<{ text: string; sender: string }[]>([]);
+  const [listening, setListening] = useState(false);
+  const [lastTranscriptTime, setLastTranscriptTime] = useState(0);
+
+  const { transcript, listening: srListening, resetTranscript } = useSpeechRecognition(); // get resetTranscript from useSpeechRecognition
 
   useEffect(() => {
-    setIsDesktop(window.innerWidth >= 768);
-  }, []);
+    if (srListening) {
+      setMessageText(transcript);
+    }
+  }, [transcript, srListening]);
 
   useEffect(() => {
-    if (videoEnded) {
-      const element = document.getElementById("startTimer");
-
-      if (element) {
-        element.style.display = "flex";
-      }
-
-      setCapturing(true);
-      setIsVisible(false);
-
-      mediaRecorderRef.current = new MediaRecorder(
-        webcamRef?.current?.stream as MediaStream
-      );
-      mediaRecorderRef.current.addEventListener(
-        "dataavailable",
-        handleDataAvailable
-      );
-      mediaRecorderRef.current.start();
+    if (!srListening && listening) {
+      resetTranscript();
     }
-  }, [videoEnded, webcamRef, setCapturing, mediaRecorderRef]);
+  }, [srListening, listening, resetTranscript]);
 
-  const handleStartCaptureClick = useCallback(() => {
-    const startTimer = document.getElementById("startTimer");
-    if (startTimer) {
-      startTimer.style.display = "none";
-    }
-
-    if (vidRef.current) {
-      vidRef.current.play();
-    }
-  }, [webcamRef, setCapturing, mediaRecorderRef]);
-
-  const handleDataAvailable = useCallback(
-    ({ data }: BlobEvent) => {
-      if (data.size > 0) {
-        setRecordedChunks((prev) => prev.concat(data));
-      }
-    },
-    [setRecordedChunks]
-  );
-
-  const handleStopCaptureClick = useCallback(() => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-    }
-    setCapturing(false);
-  }, [mediaRecorderRef, webcamRef, setCapturing]);
-
-  useEffect(() => {
-    let timer: any = null;
-    if (capturing) {
-      timer = setInterval(() => {
-        setSeconds((seconds) => seconds - 1);
-      }, 1000);
-      if (seconds === 0) {
-        handleStopCaptureClick();
-        setCapturing(false);
-        setSeconds(0);
-      }
-    }
-    return () => {
-      clearInterval(timer);
-    };
-  });
-
-  const handleDownload = async () => {
-    if (recordedChunks.length) {
-      setSubmitting(true);
-      setStatus("Processing");
-
-      const file = new Blob(recordedChunks, {
-        type: `video/webm`,
-      });
-
-      const unique_id = uuid();
-
-      // This checks if ffmpeg is loaded
-      if (!ffmpeg.isLoaded()) {
-        await ffmpeg.load();
-      }
-
-      // This writes the file to memory, removes the video, and converts the audio to mp3
-      ffmpeg.FS("writeFile", `${unique_id}.webm`, await fetchFile(file));
-      await ffmpeg.run(
-        "-i",
-        `${unique_id}.webm`,
-        "-vn",
-        "-acodec",
-        "libmp3lame",
-        "-ac",
-        "1",
-        "-ar",
-        "16000",
-        "-f",
-        "mp3",
-        `${unique_id}.mp3`
-      );
-
-      // This reads the converted file from the file system
-      const fileData = ffmpeg.FS("readFile", `${unique_id}.mp3`);
-      // This creates a new file from the raw data
-      const output = new File([fileData.buffer], `${unique_id}.mp3`, {
-        type: "audio/mp3",
-      });
-
-      const formData = new FormData();
-      formData.append("file", output, `${unique_id}.mp3`);
-      formData.append("model", "whisper-1");
-
-      const question =
-      selected.name === "MBB Behavioral Interview"
-        ? `Hi there! Tell me about yourself and walk me through your resume?`
-        : selected.name === "Unicloth 👚"
-        ? "Unicloth, a popular clothing retailer, is facing declining sales in their physical stores while experiencing a surge in online competition. As a consultant, how would you advise Unicloth to adapt their business strategy to thrive in the digital era and maintain a strong market position?"
-        : "How many customers does Unicloth currently serve?";
-    
-
-      setStatus("Transcribing");
-
-      const upload = await fetch(
-        `/api/transcribe?question=${encodeURIComponent(question)}`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-      const results = await upload.json();
-
-      if (upload.ok) {
-        setIsSuccess(true);
-        setSubmitting(false);
-
-        if (results.error) {
-          setTranscript(results.error);
-        } else {
-          setTranscript(results.transcript);
-        }
-
-        console.log("Uploaded successfully!");
-
-        await Promise.allSettled([
-          new Promise((resolve) => setTimeout(resolve, 800)),
-        ]).then(() => {
-          setCompleted(true);
-          console.log("Success!");
-        });
-
-        if (results.transcript.length > 0) {
-          const prompt = `Please give feedback on the following interview question: ${question} given the following transcript: ${
-            results.transcript
-          }. $]\
-            selected.name === "MBB Behavioral Interview"
-              ? "Please also give feedback on the candidate's communication skills. Make sure their response is structured (perhaps using the STAR or PAR frameworks)."
-              : "Please also give feedback on the candidate's communication skills. Make sure they accurately explain their thoughts in a coherent way. Make sure they stay on topic and relevant to the question."
-          } \n\n\ Feedback on the candidate's response:`;
-
-          setGeneratedFeedback("");
-          const response = await fetch("/api/generate", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              prompt,
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error(response.statusText);
-          }
-
-          // This data is a ReadableStream
-          const data = response.body;
-          if (!data) {
-            return;
-          }
-
-          const reader = data.getReader();
-          const decoder = new TextDecoder();
-          let done = false;
-
-          while (!done) {
-            const { value, done: doneReading } = await reader.read();
-            done = doneReading;
-            const chunkValue = decoder.decode(value);
-            setGeneratedFeedback((prev: any) => prev + chunkValue);
-          }
-        }
-      } else {
-        console.error("Upload failed.");
-      }
-
-      setTimeout(function () {
-        setRecordedChunks([]);
-      }, 1500);
+  const handleMicClick = () => {
+    if (!listening) {
+      SpeechRecognition.startListening({ continuous: true });
+      setListening(true);
+    } else {
+      SpeechRecognition.stopListening();
+      setListening(false);
     }
   };
 
-  function restartVideo() {
-    setRecordedChunks([]);
-    setVideoEnded(false);
-    setCapturing(false);
-    setIsVisible(true);
-    setSeconds(150);
-  }
+  useEffect(() => {
+    if (srListening) {
+      setMessageText(transcript);
+      setLastTranscriptTime(Date.now());
+    } else {
+      const elapsedTime = Date.now() - lastTranscriptTime;
+      if (elapsedTime >= 1500 && listening) {
+        SpeechRecognition.stopListening();
+        setListening(false);
+        handleMessageSend(); // call the send message function
+      }
+    }
+  }, [transcript, srListening, lastTranscriptTime, listening]);
 
-  const videoConstraints = isDesktop
-    ? { width: 1280, height: 720, facingMode: "user" }
-    : { width: 480, height: 640, facingMode: "user" };
+  useEffect(() => {
+    if (messageText.trim() !== "") {
+      inactivityTimer = setInterval(() => {
+        const elapsedTime = Date.now() - lastTranscriptTime;
+        if (elapsedTime >= 1500 && listening) {
+          SpeechRecognition.stopListening();
+          setListening(false);
+          clearInterval(inactivityTimer);
+          handleMessageSend();
+        }
+      }, 1000);
+    }
 
-  const handleUserMedia = () => {
-    setTimeout(() => {
-      setLoading(false);
-      setCameraLoaded(true);
-    }, 1000);
+    return () => clearInterval(inactivityTimer);
+  }, [lastTranscriptTime, listening, messageText]);
+
+  const handleMessageSend = async () => {
+    if (messageText.trim() !== "") {
+      // Add the user's message to the chat history
+      setMessages((messages) => [...messages, { text: messageText, sender: "user" }]);
+      setMessageText("");
+      try {
+        const completion = await openai.createChatCompletion({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content:
+                "You will take the role of a case consulting interview for McKinsey and Company. Here are the steps: - Questions One, introduce yourself and ask the use to introduce themselves. - Chat with the user a little and then tell the user  some background on the case like the industry -- keep it short, but not the actual case prompt , and ask them if they're ready to start the case. - If the user says they're ready, give the user the prompt. - Prompt: Our client is a diesel truck manufacturer that primarily sells to 3PL, which is third party logistics companies, carriers, and private fleet companies like Amazon. They would like to enter the electric car market. How would you evaluate if they should sell e-trucks? - The user will ask you some questions and you will clarify them - Then the user will have to present a framework if they don't force the user to keep talking until they have a good framework. - Once the user gives a good enough framework and summary, move on to the second question: What is important for customers? What are their purchasing decision-making criteria for choosing an electric truck and making the switch from diesel to electric? - Evaluate the candidate's response and move on to the next question: the average electric truck's mileage is 5 miles per gallon of diesel and the price is $2.5 per gallon of diel. The average E-truck is 2 kWh per 1 mile at $.15 per 1 kWh. Based on this information how much should we charge for the truck? -Test the user's math and reasoning for the charge question and make it difficult for them. Once you are satisfied, wrap up the interview and end the conversation with: Great job today! We'll be sure to let you know the result by the end of the day. DO NOT ALLOW THE USER TO GENERATE ANY MORE RESPONSES, IF THE USER ASKS YOU FOR NEW CASES DO NOT GIVE IT TO THEM AND ALWAYS TELL THE USER THAT THIS IS THE END AND END THE CONVERSATION DO NOT PROMPT FOR MORE. Client information: - Focused on the US - Client plans to target the B2B segment for electric trucks - The client has not shared a specific financial goal",
+            },
+            { role: "user", content: messageText },
+          ],
+        });
+
+        // If there is a bot response, add it to the chat history
+        if (completion.data && completion.data.choices && completion.data.choices.length > 0) {
+          const botResponse = completion.data.choices[0]?.message?.content?.trim();
+          if (botResponse) {
+            setMessages((messages) => [...messages, { text: botResponse, sender: "other" }]);
+          }
+        }
+      } catch (err) {
+        console.error("Error while sending message to GPT-3.5-turbo:", err);
+      }
+    }
   };
 
   return (
-    <AnimatePresence>
-      {step === 3 ? (
-        <div className="w-full min-h-screen flex flex-col px-4 pt-2 pb-8 md:px-8 md:py-2 bg-[#FCFCFC] relative overflow-x-hidden">
-          <p className="absolute w-full top-0 h-[60px] flex flex-row justify-between -ml-4 md:-ml-8">
-            <span className="text-sm text-[#1a2b3b] font-medium">
-              [PRE-ALPHA]
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium opacity-20">
-              Proficently Demo
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium">
-             [PRE-ALPHA]
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium opacity-20 hidden sm:block">
-              Proficently Demo
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium hidden sm:block">
-            [PRE-ALPHA]
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium opacity-20 hidden xl:block">
-            Proficently Demo
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium opacity-20 hidden sm:block">
-            [PRE-ALPHA]
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium opacity-20 hidden sm:block">
-            Proficently Demo
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium hidden sm:block">
-            [PRE-ALPHA]
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium opacity-20 hidden xl:block">
-            Proficently Demo
-            </span>
-          </p>
-          {completed ? (
-            <div className="w-full flex flex-col max-w-[1080px] mx-auto mt-[10vh] overflow-y-auto pb-8 md:pb-12">
-              <motion.div
-                initial={{ y: 20 }}
-                animate={{ y: 0 }}
-                transition={{ duration: 0.35, ease: [0.075, 0.82, 0.165, 1] }}
-                className="relative md:aspect-[16/9] w-full max-w-[1080px] overflow-hidden bg-[#1D2B3A] rounded-lg ring-1 ring-gray-900/5 shadow-md flex flex-col items-center justify-center"
-              >
-                <video
-                  className="w-full h-full rounded-lg"
-                  controls
-                  crossOrigin="anonymous"
-                  autoPlay
-                >
-                  <source
-                    src={URL.createObjectURL(
-                      new Blob(recordedChunks, { type: "video/mp4" })
-                    )}
-                    type="video/mp4"
-                  />
-                </video>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  delay: 0.5,
-                  duration: 0.15,
-                  ease: [0.23, 1, 0.82, 1],
-                }}
-                className="flex flex-col md:flex-row items-center mt-2 md:mt-4 md:justify-between space-y-1 md:space-y-0"
-              >
-                <div className="flex flex-row items-center space-x-1">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                    className="w-4 h-4 text-[#407BBF] shrink-0"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-                    />
-                  </svg>
-                  <p className="text-[14px] font-normal leading-[20px] text-[#1a2b3b]">
-                    Video is not stored on our servers, and will go away as soon
-                    as you leave the page.
-                  </p>
-                </div>
-
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  delay: 0.5,
-                  duration: 0.15,
-                  ease: [0.23, 1, 0.82, 1],
-                }}
-                className="mt-8 flex flex-col"
-              >
-                <div>
-                  <h2 className="text-xl font-semibold text-left text-[#1D2B3A] mb-2">
-                    Transcript
-                  </h2>
-                  <p className="prose prose-sm max-w-none">
-                    {transcript.length > 0
-                      ? transcript
-                      : "Don't think you said anything. Want to try again?"}
-                  </p>
-                </div>
-                <div className="mt-8">
-                  <h2 className="text-xl font-semibold text-left text-[#1D2B3A] mb-2">
-                    Feedback
-                  </h2>
-                  <div className="mt-4 text-sm flex gap-2.5 rounded-lg border border-[#EEEEEE] bg-[#FAFAFA] p-4 leading-6 text-gray-900 min-h-[100px]">
-                    <p className="prose prose-sm max-w-none">
-                      {generatedFeedback}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          ) : (
-            <div className="h-full w-full items-center flex flex-col mt-[10vh]">
-              {recordingPermission ? (
-                <div className="w-full flex flex-col max-w-[1080px] mx-auto justify-center">
-                  <h2 className="text-2xl font-semibold text-left text-[#1D2B3A] mb-2">
-                    {selected.name === "MBB Behavioral Interview"
-            ? `Hi there! Tell me about yourself and walk me through your resume?`
-            : selected.name === "Unicloth 👚"
-            ? "Unicloth, a popular clothing retailer, is facing declining sales in their physical stores while experiencing a surge in online competition. As a consultant, how would you advise Unicloth to adapt their business strategy to thrive in the digital era and maintain a strong market position?"
-            : "How many customers does Unicloth currently serve?"}
-                  </h2>
-                  <span className="text-[14px] leading-[20px] text-[#1a2b3b] font-normal mb-4">
-                    Sample MBB style Behavioral Question
-                  </span>
-                  <motion.div
-                    initial={{ y: -20 }}
-                    animate={{ y: 0 }}
-                    transition={{
-                      duration: 0.35,
-                      ease: [0.075, 0.82, 0.965, 1],
-                    }}
-                    className="relative aspect-[16/9] w-full max-w-[1080px] overflow-hidden bg-[#1D2B3A] rounded-lg ring-1 ring-gray-900/5 shadow-md"
-                  >
-                    {!cameraLoaded && (
-                      <div className="text-white absolute top-1/2 left-1/2 z-20 flex items-center">
-                        <svg
-                          className="animate-spin h-4 w-4 text-white mx-auto my-0.5"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth={3}
-                          ></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          ></path>
-                        </svg>
-                      </div>
-                    )}
-                    <div className="relative z-10 h-full w-full rounded-lg">
-                      <div className="absolute top-5 lg:top-10 left-5 lg:left-10 z-20">
-                        <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-0.5 text-sm font-medium text-gray-800">
-                          {new Date(seconds * 1000).toISOString().slice(14, 19)}
-                        </span>
-                      </div>
-                      {isVisible && ( // If the video is visible (on screen) we show it
-                        <div className="block absolute top-[10px] sm:top-[20px] lg:top-[40px] left-auto right-[10px] sm:right-[20px] md:right-10 h-[80px] sm:h-[140px] md:h-[180px] aspect-video rounded z-20">
-                          <div className="h-full w-full aspect-video rounded md:rounded-lg lg:rounded-xl">
-                            <video
-                              id="question-video"
-                              onEnded={() => setVideoEnded(true)}
-                              controls={false}
-                              ref={vidRef}
-                              playsInline
-                              className="h-full object-cover w-full rounded-md md:rounded-[12px] aspect-video"
-                              crossOrigin="anonymous"
-                            >
-                              <source
-                                src={
-                                  selectedInterviewer.name === "Unicloth 👚"
-                                    ? selected.name === "MBB Behavioral Interview"
-                                      ? "https://liftoff-public.s3.amazonaws.com/DemoInterviewMale.mp4"
-                                      : "https://liftoff-public.s3.amazonaws.com/JohnTechnical.mp4"
-                                    : selectedInterviewer.name === "Snack Foods Acquisition 🍎"
-                                    ? selected.name === "MBB Behavioral Interview"
-                                      ? "https://liftoff-public.s3.amazonaws.com/RichardCase Interview.mp4"
-                                      : "https://liftoff-public.s3.amazonaws.com/RichardTechnical.mp4"
-                                    : selectedInterviewer.name === "Brazilian Highway Concessions 🚦"
-                                    ? selected.name === "MBB Behavioral Interview"
-                                      ? "https://liftoff-public.s3.amazonaws.com/Case InterviewSarah.mp4"
-                                      : "https://liftoff-public.s3.amazonaws.com/SarahTechnical.mp4"
-                                    : selected.name === "MBB Behavioral Interview"
-                                    ? "https://liftoff-public.s3.amazonaws.com/DemoInterviewMale.mp4"
-                                    : "https://liftoff-public.s3.amazonaws.com/JohnTechnical.mp4"
-                                }
-                                type="video/mp4"
-                              />
-                            </video>
-                          </div>
-                        </div>
-                      )}
-                      <Webcam
-                        mirrored
-                        audio
-                        muted
-                        ref={webcamRef}
-                        videoConstraints={videoConstraints}
-                        onUserMedia={handleUserMedia}
-                        onUserMediaError={(error) => {
-                          setRecordingPermission(false);
-                        }}
-                        className="absolute z-10 min-h-[100%] min-w-[100%] h-auto w-auto object-cover"
-                      />
-                    </div>
-                    {loading && (
-                      <div className="absolute flex h-full w-full items-center justify-center">
-                        <div className="relative h-[112px] w-[112px] rounded-lg object-cover text-[2rem]">
-                          <div className="flex h-[112px] w-[112px] items-center justify-center rounded-[0.5rem] bg-[#4171d8] !text-white">
-                            Loading...
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {cameraLoaded && (
-                      <div className="absolute bottom-0 left-0 z-50 flex h-[82px] w-full items-center justify-center">
-                        {recordedChunks.length > 0 ? (
-                          <>
-                            {isSuccess ? (
-                              <button
-                                className="cursor-disabled group rounded-full min-w-[140px] px-4 py-2 text-[13px] font-semibold group inline-flex items-center justify-center text-sm text-white duration-150 bg-green-500 hover:bg-green-600 hover:text-slate-100 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600 active:scale-100 active:bg-green-800 active:text-green-100"
-                                style={{
-                                  boxShadow:
-                                    "0px 1px 4px rgba(27, 71, 13, 0.17), inset 0px 0px 0px 1px #5fc767, inset 0px 0px 0px 2px rgba(255, 255, 255, 0.1)",
-                                }}
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-5 w-5 mx-auto"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                >
-                                  <motion.path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    initial={{ pathLength: 0 }}
-                                    animate={{ pathLength: 1 }}
-                                    transition={{ duration: 0.5 }}
-                                  />
-                                </svg>
-                              </button>
-                            ) : (
-                              <div className="flex flex-row gap-2">
-                                {!isSubmitting && (
-                                  <button
-                                    onClick={() => restartVideo()}
-                                    className="group rounded-full px-4 py-2 text-[13px] font-semibold transition-all flex items-center justify-center bg-white text-[#1E2B3A] hover:[linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), #0D2247] no-underline flex gap-x-2  active:scale-95 scale-100 duration-75"
-                                  >
-                                    Restart
-                                  </button>
-                                )}
-                                <button
-                                  onClick={handleDownload}
-                                  disabled={isSubmitting}
-                                  className="group rounded-full min-w-[140px] px-4 py-2 text-[13px] font-semibold transition-all flex items-center justify-center bg-[#1E2B3A] text-white hover:[linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), #0D2247] no-underline flex  active:scale-95 scale-100 duration-75  disabled:cursor-not-allowed"
-                                  style={{
-                                    boxShadow:
-                                      "0px 1px 4px rgba(13, 34, 71, 0.17), inset 0px 0px 0px 1px #061530, inset 0px 0px 0px 2px rgba(255, 255, 255, 0.1)",
-                                  }}
-                                >
-                                  <span>
-                                    {isSubmitting ? (
-                                      <div className="flex items-center justify-center gap-x-2">
-                                        <svg
-                                          className="animate-spin h-5 w-5 text-slate-50 mx-auto"
-                                          xmlns="http://www.w3.org/2000/svg"
-                                          fill="none"
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <circle
-                                            className="opacity-25"
-                                            cx="12"
-                                            cy="12"
-                                            r="10"
-                                            stroke="currentColor"
-                                            strokeWidth={3}
-                                          ></circle>
-                                          <path
-                                            className="opacity-75"
-                                            fill="currentColor"
-                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                          ></path>
-                                        </svg>
-                                        <span>{status}</span>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-center gap-x-2">
-                                        <span>Process transcript</span>
-                                        <svg
-                                          className="w-5 h-5"
-                                          viewBox="0 0 24 24"
-                                          fill="none"
-                                          xmlns="http://www.w3.org/2000/svg"
-                                        >
-                                          <path
-                                            d="M13.75 6.75L19.25 12L13.75 17.25"
-                                            stroke="white"
-                                            strokeWidth="1.5"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                          />
-                                          <path
-                                            d="M19 12H4.75"
-                                            stroke="white"
-                                            strokeWidth="1.5"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                          />
-                                        </svg>
-                                      </div>
-                                    )}
-                                  </span>
-                                </button>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="absolute bottom-[6px] md:bottom-5 left-5 right-5">
-                            <div className="lg:mt-4 flex flex-col items-center justify-center gap-2">
-                              {capturing ? (
-                                <div
-                                  id="stopTimer"
-                                  onClick={handleStopCaptureClick}
-                                  className="flex h-10 w-10 flex-col items-center justify-center rounded-full bg-transparent text-white hover:shadow-xl ring-4 ring-white  active:scale-95 scale-100 duration-75 cursor-pointer"
-                                >
-                                  <div className="h-5 w-5 rounded bg-red-500 cursor-pointer"></div>
-                                </div>
-                              ) : (
-                                <button
-                                  id="startTimer"
-                                  onClick={handleStartCaptureClick}
-                                  className="flex h-8 w-8 sm:h-8 sm:w-8 flex-col items-center justify-center rounded-full bg-red-500 text-white hover:shadow-xl ring-4 ring-white ring-offset-gray-500 ring-offset-2 active:scale-95 scale-100 duration-75"
-                                ></button>
-                              )}
-                              <div className="w-12"></div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div
-                      className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 text-5xl text-white font-semibold text-center"
-                      id="countdown"
-                    ></div>
-                  </motion.div>
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      delay: 0.5,
-                      duration: 0.15,
-                      ease: [0.23, 1, 0.82, 1],
-                    }}
-                    className="flex flex-row space-x-1 mt-4 items-center"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                      stroke="currentColor"
-                      className="w-4 h-4 text-[#407BBF]"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-                      />
-                    </svg>
-                    <p className="text-[14px] font-normal leading-[20px] text-[#1a2b3b]">
-                      Video is not stored on our servers, it is solely used for
-                      transcription.
-                    </p>
-                  </motion.div>
-                </div>
-              ) : (
-                <div className="w-full flex flex-col max-w-[1080px] mx-auto justify-center">
-                  <motion.div
-                    initial={{ y: 20 }}
-                    animate={{ y: 0 }}
-                    transition={{
-                      duration: 0.35,
-                      ease: [0.075, 0.82, 0.165, 1],
-                    }}
-                    className="relative md:aspect-[16/9] w-full max-w-[1080px] overflow-hidden bg-[#1D2B3A] rounded-lg ring-1 ring-gray-900/5 shadow-md flex flex-col items-center justify-center"
-                  >
-                    <p className="text-white font-medium text-lg text-center max-w-3xl">
-                      Camera permission is denied. We don{`'`}t store your
-                      attempts anywhere, but we understand not wanting to give
-                      us access to your camera. Try again by opening this page
-                      in an incognito window {`(`}or enable permissions in your
-                      browser settings{`)`}.
-                    </p>
-                  </motion.div>
-                  <div className="flex flex-row space-x-4 mt-8 justify-end">
-                    <button
-                      onClick={() => setStep(1)}
-                      className="group max-w-[200px] rounded-full px-4 py-2 text-[13px] font-semibold transition-all flex items-center justify-center bg-[#f5f7f9] text-[#1E2B3A] no-underline active:scale-95 scale-100 duration-75"
-                      style={{
-                        boxShadow: "0 1px 1px #0c192714, 0 1px 3px #0c192724",
-                      }}
-                    >
-                      Restart demo
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col md:flex-row w-full md:overflow-hidden">
-          <motion.p
-            initial={{ y: -10, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 1.25, ease: [0.23, 1, 0.32, 1] }}
-            className="absolute w-full md:w-1/2 top-0 h-[60px] flex flex-row justify-between"
-          >
-            <span className="text-sm text-[#1a2b3b] font-medium">
-              [PRE-ALPHA]
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium opacity-20">
-            Proficiently
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium">
-            [PRE-ALPHA]
-
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium opacity-20 hidden sm:block">
-            Proficiently
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium hidden sm:block">
-            [PRE-ALPHA]
-            </span>
-            <span className="text-sm text-[#1a2b3b] font-medium opacity-20 hidden xl:block">
-            Proficiently
-            </span>
-          </motion.p>
-          <div className="w-full min-h-[60vh] md:w-1/2 md:h-screen flex flex-col px-4 pt-2 pb-8 md:px-0 md:py-2 bg-[#FCFCFC] justify-center">
-            <div className="h-full w-full items-center justify-center flex flex-col">
-              {step === 1 ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 40 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -40 }}
-                  key="step-1"
-                  transition={{
-                    duration: 0.95,
-                    ease: [0.165, 0.84, 0.44, 1],
-                  }}
-                  className="max-w-lg mx-auto px-4 lg:px-0"
-                >
-                  <h2 className="text-4xl font-bold text-[#1E2B3A]">
-                    Select a question type
-                  </h2>
-                  <p className="text-[14px] leading-[20px] text-[#1a2b3b] font-normal my-4">
-                    We have hundreds of questions from top tech companies.
-                    Choose a type to get started.
-                  </p>
-                  <div>
-                    <RadioGroup value={selected} onChange={setSelected}>
-                      <RadioGroup.Label className="sr-only">
-                        Server size
-                      </RadioGroup.Label>
-                      <div className="space-y-4">
-                        {questions.map((question) => (
-                          <RadioGroup.Option
-                            key={question.name}
-                            value={question}
-                            className={({ checked, active }) =>
-                              classNames(
-                                checked
-                                  ? "border-transparent"
-                                  : "border-gray-300",
-                                active
-                                  ? "border-blue-500 ring-2 ring-blue-200"
-                                  : "",
-                                "relative cursor-pointer rounded-lg border bg-white px-6 py-4 shadow-sm focus:outline-none flex justify-between"
-                              )
-                            }
-                          >
-                            {({ active, checked }) => (
-                              <>
-                                <span className="flex items-center">
-                                  <span className="flex flex-col text-sm">
-                                    <RadioGroup.Label
-                                      as="span"
-                                      className="font-medium text-gray-900"
-                                    >
-                                      {question.name}
-                                    </RadioGroup.Label>
-                                    <RadioGroup.Description
-                                      as="span"
-                                      className="text-gray-500"
-                                    >
-                                      <span className="block">
-                                        {question.description}
-                                      </span>
-                                    </RadioGroup.Description>
-                                  </span>
-                                </span>
-                                <RadioGroup.Description
-                                  as="span"
-                                  className="flex text-sm ml-4 mt-0 flex-col text-right items-center justify-center"
-                                >
-                                  <span className=" text-gray-500">
-                                    {question.difficulty === "Easy" ? (
-                                      <svg
-                                        className="h-full w-[16px]"
-                                        viewBox="0 0 22 25"
-                                        fill="none"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                      >
-                                        <rect
-                                          y="13.1309"
-                                          width="6"
-                                          height="11"
-                                          rx="1"
-                                          fill="#4E7BBA"
-                                        />
-                                        <rect
-                                          x="8"
-                                          y="8.13086"
-                                          width="6"
-                                          height="16"
-                                          rx="1"
-                                          fill="#E1E1E1"
-                                        />
-                                        <rect
-                                          x="16"
-                                          y="0.130859"
-                                          width="6"
-                                          height="24"
-                                          rx="1"
-                                          fill="#E1E1E1"
-                                        />
-                                      </svg>
-                                    ) : (
-                                      <svg
-                                        className="h-full w-[16px]"
-                                        viewBox="0 0 22 25"
-                                        fill="none"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                      >
-                                        <rect
-                                          y="13.1309"
-                                          width="6"
-                                          height="11"
-                                          rx="1"
-                                          fill="#4E7BBA"
-                                        />
-                                        <rect
-                                          x="8"
-                                          y="8.13086"
-                                          width="6"
-                                          height="16"
-                                          rx="1"
-                                          fill="#4E7BBA"
-                                        />
-                                        <rect
-                                          x="16"
-                                          y="0.130859"
-                                          width="6"
-                                          height="24"
-                                          rx="1"
-                                          fill="#E1E1E1"
-                                        />
-                                      </svg>
-                                    )}
-                                  </span>
-                                  <span className="font-medium text-gray-900">
-                                    {question.difficulty}
-                                  </span>
-                                </RadioGroup.Description>
-                                <span
-                                  className={classNames(
-                                    active ? "border" : "border-2",
-                                    checked
-                                      ? "border-blue-500"
-                                      : "border-transparent",
-                                    "pointer-events-none absolute -inset-px rounded-lg"
-                                  )}
-                                  aria-hidden="true"
-                                />
-                              </>
-                            )}
-                          </RadioGroup.Option>
-                        ))}
-                      </div>
-                    </RadioGroup>
-                  </div>
-                  <div className="flex gap-[15px] justify-end mt-8">
-                    <div>
-                      <Link
-                        href="/"
-                        className="group rounded-full px-4 py-2 text-[13px] font-semibold transition-all flex items-center justify-center bg-[#f5f7f9] text-[#1E2B3A] no-underline active:scale-95 scale-100 duration-75"
-                        style={{
-                          boxShadow: "0 1px 1px #0c192714, 0 1px 3px #0c192724",
-                        }}
-                      >
-                        Back to home
-                      </Link>
-                    </div>
-                    <div>
-                      <button
-                        onClick={() => {
-                          setStep(2);
-                        }}
-                        className="group rounded-full px-4 py-2 text-[13px] font-semibold transition-all flex items-center justify-center bg-[#1E2B3A] text-white hover:[linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), #0D2247] no-underline flex gap-x-2  active:scale-95 scale-100 duration-75"
-                        style={{
-                          boxShadow:
-                            "0px 1px 4px rgba(13, 34, 71, 0.17), inset 0px 0px 0px 1px #061530, inset 0px 0px 0px 2px rgba(255, 255, 255, 0.1)",
-                        }}
-                      >
-                        <span> Continue </span>
-                        <svg
-                          className="w-5 h-5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            d="M13.75 6.75L19.25 12L13.75 17.25"
-                            stroke="#FFF"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M19 12H4.75"
-                            stroke="#FFF"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              ) : step === 2 ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 40 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -40 }}
-                  key="step-2"
-                  transition={{
-                    duration: 0.95,
-                    ease: [0.165, 0.84, 0.44, 1],
-                  }}
-                  className="max-w-lg mx-auto px-4 lg:px-0"
-                >
-                  <h2 className="text-4xl font-bold text-[#1E2B3A]">
-                    Pick a case!
-                  </h2>
-                  <p className="text-[14px] leading-[20px] text-[#1a2b3b] font-normal my-4">
-                    Choose whoever makes you feel comfortable. You can always
-                    try again with another one.
-                  </p>
-                  <div>
-                    <RadioGroup
-                      value={selectedInterviewer}
-                      onChange={setSelectedInterviewer}
-                    >
-                      <RadioGroup.Label className="sr-only">
-                        Server size
-                      </RadioGroup.Label>
-                      <div className="space-y-4">
-                        {interviewers.map((interviewer) => (
-                          <RadioGroup.Option
-                            key={interviewer.name}
-                            value={interviewer}
-                            className={({ checked, active }) =>
-                              classNames(
-                                checked
-                                  ? "border-transparent"
-                                  : "border-gray-300",
-                                active
-                                  ? "border-blue-500 ring-2 ring-blue-200"
-                                  : "",
-                                "relative cursor-pointer rounded-lg border bg-white px-6 py-4 shadow-sm focus:outline-none flex justify-between"
-                              )
-                            }
-                          >
-                            {({ active, checked }) => (
-                              <>
-                                <span className="flex items-center">
-                                  <span className="flex flex-col text-sm">
-                                    <RadioGroup.Label
-                                      as="span"
-                                      className="font-medium text-gray-900"
-                                    >
-                                      {interviewer.name}
-                                    </RadioGroup.Label>
-                                    <RadioGroup.Description
-                                      as="span"
-                                      className="text-gray-500"
-                                    >
-                                      <span className="block">
-                                        {interviewer.description}
-                                      </span>
-                                    </RadioGroup.Description>
-                                  </span>
-                                </span>
-                                <RadioGroup.Description
-                                  as="span"
-                                  className="flex text-sm ml-4 mt-0 flex-col text-right items-center justify-center"
-                                >
-                                  <span className=" text-gray-500">
-                                    <svg
-                                      className="w-[28px] h-full"
-                                      viewBox="0 0 38 30"
-                                      fill="none"
-                                      xmlns="http://www.w3.org/2000/svg"
-                                    >
-                                      <g filter="url(#filter0_d_34_25)">
-                                        <g clipPath="url(#clip0_34_25)">
-                                          <mask
-                                            id="mask0_34_25"
-                                            style={{ maskType: "luminance" }}
-                                            maskUnits="userSpaceOnUse"
-                                            x="3"
-                                            y="1"
-                                            width="32"
-                                            height="24"
-                                          >
-                                            <rect
-                                              x="3"
-                                              y="1"
-                                              width="32"
-                                              height="24"
-                                              fill="white"
-                                            />
-                                          </mask>
-                                          <g mask="url(#mask0_34_25)">
-                                            <path
-                                              fillRule="evenodd"
-                                              clipRule="evenodd"
-                                              d="M3 1H35V25H3V1Z"
-                                              fill="#F7FCFF"
-                                            />
-                                            <path
-                                              fillRule="evenodd"
-                                              clipRule="evenodd"
-                                              d="M3 15.6666V17.6666H35V15.6666H3Z"
-                                              fill="#E31D1C"
-                                            />
-                                            <path
-                                              fillRule="evenodd"
-                                              clipRule="evenodd"
-                                              d="M3 19.3334V21.3334H35V19.3334H3Z"
-                                              fill="#E31D1C"
-                                            />
-                                            <path
-                                              fillRule="evenodd"
-                                              clipRule="evenodd"
-                                              d="M3 8.33337V10.3334H35V8.33337H3Z"
-                                              fill="#E31D1C"
-                                            />
-                                            <path
-                                              fillRule="evenodd"
-                                              clipRule="evenodd"
-                                              d="M3 23V25H35V23H3Z"
-                                              fill="#E31D1C"
-                                            />
-                                            <path
-                                              fillRule="evenodd"
-                                              clipRule="evenodd"
-                                              d="M3 12V14H35V12H3Z"
-                                              fill="#E31D1C"
-                                            />
-                                            <path
-                                              fillRule="evenodd"
-                                              clipRule="evenodd"
-                                              d="M3 1V3H35V1H3Z"
-                                              fill="#E31D1C"
-                                            />
-                                            <path
-                                              fillRule="evenodd"
-                                              clipRule="evenodd"
-                                              d="M3 4.66663V6.66663H35V4.66663H3Z"
-                                              fill="#E31D1C"
-                                            />
-                                            <rect
-                                              x="3"
-                                              y="1"
-                                              width="20"
-                                              height="13"
-                                              fill="#2E42A5"
-                                            />
-                                            <path
-                                              fillRule="evenodd"
-                                              clipRule="evenodd"
-                                              d="M4.72221 3.93871L3.99633 4.44759L4.2414 3.54198L3.59668 2.96807H4.43877L4.7212 2.229L5.05237 2.96807H5.77022L5.20619 3.54198L5.42455 4.44759L4.72221 3.93871ZM8.72221 3.93871L7.99633 4.44759L8.2414 3.54198L7.59668 2.96807H8.43877L8.7212 2.229L9.05237 2.96807H9.77022L9.20619 3.54198L9.42455 4.44759L8.72221 3.93871ZM11.9963 4.44759L12.7222 3.93871L13.4245 4.44759L13.2062 3.54198L13.7702 2.96807H13.0524L12.7212 2.229L12.4388 2.96807H11.5967L12.2414 3.54198L11.9963 4.44759ZM16.7222 3.93871L15.9963 4.44759L16.2414 3.54198L15.5967 2.96807H16.4388L16.7212 2.229L17.0524 2.96807H17.7702L17.2062 3.54198L17.4245 4.44759L16.7222 3.93871ZM3.99633 8.44759L4.72221 7.93871L5.42455 8.44759L5.20619 7.54198L5.77022 6.96807H5.05237L4.7212 6.229L4.43877 6.96807H3.59668L4.2414 7.54198L3.99633 8.44759ZM8.72221 7.93871L7.99633 8.44759L8.2414 7.54198L7.59668 6.96807H8.43877L8.7212 6.229L9.05237 6.96807H9.77022L9.20619 7.54198L9.42455 8.44759L8.72221 7.93871ZM11.9963 8.44759L12.7222 7.93871L13.4245 8.44759L13.2062 7.54198L13.7702 6.96807H13.0524L12.7212 6.229L12.4388 6.96807H11.5967L12.2414 7.54198L11.9963 8.44759ZM16.7222 7.93871L15.9963 8.44759L16.2414 7.54198L15.5967 6.96807H16.4388L16.7212 6.229L17.0524 6.96807H17.7702L17.2062 7.54198L17.4245 8.44759L16.7222 7.93871ZM3.99633 12.4476L4.72221 11.9387L5.42455 12.4476L5.20619 11.542L5.77022 10.9681H5.05237L4.7212 10.229L4.43877 10.9681H3.59668L4.2414 11.542L3.99633 12.4476ZM8.72221 11.9387L7.99633 12.4476L8.2414 11.542L7.59668 10.9681H8.43877L8.7212 10.229L9.05237 10.9681H9.77022L9.20619 11.542L9.42455 12.4476L8.72221 11.9387ZM11.9963 12.4476L12.7222 11.9387L13.4245 12.4476L13.2062 11.542L13.7702 10.9681H13.0524L12.7212 10.229L12.4388 10.9681H11.5967L12.2414 11.542L11.9963 12.4476ZM16.7222 11.9387L15.9963 12.4476L16.2414 11.542L15.5967 10.9681H16.4388L16.7212 10.229L17.0524 10.9681H17.7702L17.2062 11.542L17.4245 12.4476L16.7222 11.9387ZM19.9963 4.44759L20.7222 3.93871L21.4245 4.44759L21.2062 3.54198L21.7702 2.96807H21.0524L20.7212 2.229L20.4388 2.96807H19.5967L20.2414 3.54198L19.9963 4.44759ZM20.7222 7.93871L19.9963 8.44759L20.2414 7.54198L19.5967 6.96807H20.4388L20.7212 6.229L21.0524 6.96807H21.7702L21.2062 7.54198L21.4245 8.44759L20.7222 7.93871ZM19.9963 12.4476L20.7222 11.9387L21.4245 12.4476L21.2062 11.542L21.7702 10.9681H21.0524L20.7212 10.229L20.4388 10.9681H19.5967L20.2414 11.542L19.9963 12.4476ZM6.72221 5.93871L5.99633 6.44759L6.2414 5.54198L5.59668 4.96807H6.43877L6.7212 4.229L7.05237 4.96807H7.77022L7.20619 5.54198L7.42455 6.44759L6.72221 5.93871ZM9.99633 6.44759L10.7222 5.93871L11.4245 6.44759L11.2062 5.54198L11.7702 4.96807H11.0524L10.7212 4.229L10.4388 4.96807H9.59668L10.2414 5.54198L9.99633 6.44759ZM14.7222 5.93871L13.9963 6.44759L14.2414 5.54198L13.5967 4.96807H14.4388L14.7212 4.229L15.0524 4.96807H15.7702L15.2062 5.54198L15.4245 6.44759L14.7222 5.93871ZM5.99633 10.4476L6.72221 9.93871L7.42455 10.4476L7.20619 9.54198L7.77022 8.96807H7.05237L6.7212 8.229L6.43877 8.96807H5.59668L6.2414 9.54198L5.99633 10.4476ZM10.7222 9.93871L9.99633 10.4476L10.2414 9.54198L9.59668 8.96807H10.4388L10.7212 8.229L11.0524 8.96807H11.7702L11.2062 9.54198L11.4245 10.4476L10.7222 9.93871ZM13.9963 10.4476L14.7222 9.93871L15.4245 10.4476L15.2062 9.54198L15.7702 8.96807H15.0524L14.7212 8.229L14.4388 8.96807H13.5967L14.2414 9.54198L13.9963 10.4476ZM18.7222 5.93871L17.9963 6.44759L18.2414 5.54198L17.5967 4.96807H18.4388L18.7212 4.229L19.0524 4.96807H19.7702L19.2062 5.54198L19.4245 6.44759L18.7222 5.93871ZM17.9963 10.4476L18.7222 9.93871L19.4245 10.4476L19.2062 9.54198L19.7702 8.96807H19.0524L18.7212 8.229L18.4388 8.96807H17.5967L18.2414 9.54198L17.9963 10.4476Z"
-                                              fill="#F7FCFF"
-                                            />
-                                          </g>
-                                          <rect
-                                            x="3"
-                                            y="1"
-                                            width="32"
-                                            height="24"
-                                            fill="url(#paint0_linear_34_25)"
-                                            style={{ mixBlendMode: "overlay" }}
-                                          />
-                                        </g>
-                                        <rect
-                                          x="3.5"
-                                          y="1.5"
-                                          width="31"
-                                          height="23"
-                                          rx="1.5"
-                                          stroke="black"
-                                          strokeOpacity="0.1"
-                                          style={{ mixBlendMode: "multiply" }}
-                                        />
-                                      </g>
-                                      <defs>
-                                        <filter
-                                          id="filter0_d_34_25"
-                                          x="0"
-                                          y="0"
-                                          width="38"
-                                          height="30"
-                                          filterUnits="userSpaceOnUse"
-                                          colorInterpolationFilters="sRGB"
-                                        >
-                                          <feFlood
-                                            floodOpacity="0"
-                                            result="BackgroundImageFix"
-                                          />
-                                          <feColorMatrix
-                                            in="SourceAlpha"
-                                            type="matrix"
-                                            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"
-                                            result="hardAlpha"
-                                          />
-                                          <feOffset dy="2" />
-                                          <feGaussianBlur stdDeviation="1.5" />
-                                          <feColorMatrix
-                                            type="matrix"
-                                            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.1 0"
-                                          />
-                                          <feBlend
-                                            mode="normal"
-                                            in2="BackgroundImageFix"
-                                            result="effect1_dropShadow_34_25"
-                                          />
-                                          <feBlend
-                                            mode="normal"
-                                            in="SourceGraphic"
-                                            in2="effect1_dropShadow_34_25"
-                                            result="shape"
-                                          />
-                                        </filter>
-                                        <linearGradient
-                                          id="paint0_linear_34_25"
-                                          x1="19"
-                                          y1="1"
-                                          x2="19"
-                                          y2="25"
-                                          gradientUnits="userSpaceOnUse"
-                                        >
-                                          <stop
-                                            stopColor="white"
-                                            stopOpacity="0.7"
-                                          />
-                                          <stop offset="1" stopOpacity="0.3" />
-                                        </linearGradient>
-                                        <clipPath id="clip0_34_25">
-                                          <rect
-                                            x="3"
-                                            y="1"
-                                            width="32"
-                                            height="24"
-                                            rx="2"
-                                            fill="white"
-                                          />
-                                        </clipPath>
-                                      </defs>
-                                    </svg>
-                                  </span>
-                                  <span className="font-medium text-gray-900">
-                                    EN
-                                  </span>
-                                </RadioGroup.Description>
-                                <span
-                                  className={classNames(
-                                    active ? "border" : "border-2",
-                                    checked
-                                      ? "border-blue-500"
-                                      : "border-transparent",
-                                    "pointer-events-none absolute -inset-px rounded-lg"
-                                  )}
-                                  aria-hidden="true"
-                                />
-                              </>
-                            )}
-                          </RadioGroup.Option>
-                        ))}
-                      </div>
-                    </RadioGroup>
-                  </div>
-                  <div className="flex gap-[15px] justify-end mt-8">
-                    <div>
-                      <button
-                        onClick={() => setStep(1)}
-                        className="group rounded-full px-4 py-2 text-[13px] font-semibold transition-all flex items-center justify-center bg-[#f5f7f9] text-[#1E2B3A] no-underline active:scale-95 scale-100 duration-75"
-                        style={{
-                          boxShadow: "0 1px 1px #0c192714, 0 1px 3px #0c192724",
-                        }}
-                      >
-                        Previous step
-                      </button>
-                    </div>
-                    <div>
-                      <button
-                        onClick={() => {
-                          setStep(3);
-                        }}
-                        className="group rounded-full px-4 py-2 text-[13px] font-semibold transition-all flex items-center justify-center bg-[#1E2B3A] text-white hover:[linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), #0D2247] no-underline flex gap-x-2  active:scale-95 scale-100 duration-75"
-                        style={{
-                          boxShadow:
-                            "0px 1px 4px rgba(13, 34, 71, 0.17), inset 0px 0px 0px 1px #061530, inset 0px 0px 0px 2px rgba(255, 255, 255, 0.1)",
-                        }}
-                      >
-                        <span> Continue </span>
-                        <svg
-                          className="w-5 h-5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            d="M13.75 6.75L19.25 12L13.75 17.25"
-                            stroke="#FFF"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M19 12H4.75"
-                            stroke="#FFF"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              ) : (
-                <p>Step 3</p>
-              )}
-            </div>
-          </div>
-          <div className="w-full h-[40vh] md:w-1/2 md:h-screen bg-[#F1F2F4] relative overflow-hidden">
+    <div className="h-screen flex flex-col items-center justify-center bg-black">
+      <motion.div
+        initial={{ opacity: 0, y: -100 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="rounded-md w-11/12 h-full mt-4 bg-white md:flex md:flex-row"
+      >
+        <div className="w-full md:w-2/3 border-b md:border-b-0 md:border-r-2 flex flex-col">
+          <div className="flex items-center min-h-[4.5rem] px-8 py-3 border-b border-n-3">
+            <div className="text-xl font-bold flex-grow-0">[DEMO - BETA] 👚 Unicloth - Interviewer Led</div>
+            <div className="flex-grow"></div>
             <svg
-              id="texture"
-              style={{ filter: "contrast(120%) brightness(120%)" }}
-              className="fixed z-[1] w-full h-full opacity-[35%]"
+              className="inline-block w-6 h-6 fill-n-4 transition-colors group-hover:fill-primary-1"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
             >
-              <filter id="noise" data-v-1d260e0e="">
-                <feTurbulence
-                  type="fractalNoise"
-                  baseFrequency=".8"
-                  numOctaves="4"
-                  stitchTiles="stitch"
-                  data-v-1d260e0e=""
-                ></feTurbulence>
-                <feColorMatrix
-                  type="saturate"
-                  values="0"
-                  data-v-1d260e0e=""
-                ></feColorMatrix>
-              </filter>
-              <rect
-                width="100%"
-                height="100%"
-                filter="url(#noise)"
-                data-v-1d260e0e=""
-              ></rect>
+              <path d="M17.138 10c.795 0 1.386-.001 1.898.136a4 4 0 0 1 2.828 2.828c.12.448.135.956.136 1.609v1.668l-.044 2.011c-.046.562-.145 1.079-.392 1.564a4 4 0 0 1-1.748 1.748c-.485.247-1.002.346-1.564.392-.541.044-1.206.044-2.011.044H7.759c-.805 0-1.469 0-2.011-.044-.562-.046-1.079-.145-1.564-.392a4 4 0 0 1-1.748-1.748c-.247-.485-.346-1.002-.392-1.564A21.98 21.98 0 0 1 2 16.578v-1.715c0-.795-.001-1.386.136-1.898a4 4 0 0 1 2.828-2.828C5.476 9.999 6.067 10 6.863 10H7a1 1 0 1 1 0 2l-.362.001c-.711.003-.963.016-1.155.068a2 2 0 0 0-1.414 1.414c-.052.193-.065.444-.068 1.155v2.094l.037 1.357c.036.438.101.663.18.819a2 2 0 0 0 .874.874c.156.08.381.145.819.18.4.033.905.037 1.613.038H16.2l1.889-.038c.438-.036.663-.101.819-.18a2 2 0 0 0 .874-.874c.08-.156.145-.381.18-.819.033-.4.037-.905.038-1.613V15l-.068-1.518a2 2 0 0 0-1.414-1.414c-.193-.052-.444-.065-1.155-.068L17 12h0a1 1 0 1 1 0-2h.138zm-4.43-7.707l4 4a1 1 0 0 1-1.414 1.414L13 5.414V15a1 1 0 1 1-2 0V5.414L8.707 7.707a1 1 0 1 1-1.414-1.414l4-4a1 1 0 0 1 1.414 0z"></path>
             </svg>
-            <figure
-              className="absolute md:top-1/2 ml-[-380px] md:ml-[0px] md:-mt-[240px] left-1/2 grid transform scale-[0.5] sm:scale-[0.6] md:scale-[130%] w-[760px] h-[540px] bg-[#f5f7f9] text-[9px] origin-[50%_15%] md:origin-[50%_25%] rounded-[15px] overflow-hidden p-2 z-20"
-              style={{
-                grid: "100%/repeat(1,calc(5px * 28)) 1fr",
-                boxShadow:
-                  "0 192px 136px rgba(26,43,59,.23),0 70px 50px rgba(26,43,59,.16),0 34px 24px rgba(26,43,59,.13),0 17px 12px rgba(26,43,59,.1),0 7px 5px rgba(26,43,59,.07), 0 50px 100px -20px rgb(50 50 93 / 25%), 0 30px 60px -30px rgb(0 0 0 / 30%), inset 0 -2px 6px 0 rgb(10 37 64 / 35%)",
-              }}
-            >
-              <div className="z-20 absolute h-full w-full bg-transparent cursor-default">
-              <img src="/images/demo.png" alt="Logo" className="w-flex h-flex mt-12" />
+          </div>
 
-              </div>
- 
-
-            </figure>
+          <div className="flex-grow md:h-full relative overflow-y-auto">
+          <div className="flex flex-col mb-4 gap-4 py-4 m-4">
+            {messages.map((message, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.1, delay: index * 0.1 }}
+              >
+                <Message text={message.text} sender={message.sender} />
+              </motion.div>
+            ))}
           </div>
         </div>
-      )}
-    </AnimatePresence>
+
+          <div className="bg-white border shadow-lg">
+            <div className="rounded-lg flex-none mx-8 flex items-center">
+              {/* off state
+                 - handle on state,
+                 - transcription,
+                 - enter off state,
+                 - 
+                */}
+              <motion.svg
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke={listening ? "red" : "currentColor"}
+                className="w-6 h-6"
+                onClick={handleMicClick}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"
+                />
+              </motion.svg>
+              <textarea
+                className="w-full h-16 rounded placeholder-gray-500 text-gray-900 overflow-y-auto resize-none flex-grow ml-4 mr-4 mt-6 focus:outline-none placeholder-center p-2"
+                placeholder="Type your message here..."
+                name="message"
+                value={messageText} // Bind the textarea value to the state
+                onChange={(e) => setMessageText(e.target.value)} // Update the state when the textarea value changes
+              ></textarea>
+
+              <motion.svg
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-6 h-6"
+                onClick={handleMessageSend} // Call the handler when the SVG is clicked
+                style={{ cursor: "pointer" }}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+                />
+              </motion.svg>
+            </div>
+          </div>
+        </div>
+        <div className="hidden md:block w-full md:w-1/3">
+          <motion.div
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex items-center min-h-[4.5rem] px-12 py-3 border-b border-n-3"
+          >
+            <h1 className="text-center">Notes</h1>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+            className="p-4 mt-4 bg-white rounded-lg"
+          >
+            <motion.textarea
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5 }}
+              className="w-full h-120 p-4 placeholder-gray-500 text-gray-900 resize-vertical border rounded focus:outline-none"
+              placeholder="Write your notes here..."
+              // Add any necessary event handlers or state management
+            ></motion.textarea>
+          </motion.div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
