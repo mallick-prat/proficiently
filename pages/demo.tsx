@@ -18,7 +18,54 @@ export default function DemoPage() {
   const [listening, setListening] = useState(false);
   const [lastTranscriptTime, setLastTranscriptTime] = useState(0);
 
-  const { transcript, listening: srListening, resetTranscript } = useSpeechRecognition(); // get resetTranscript from useSpeechRecognition
+  const { transcript, listening: srListening, resetTranscript } = useSpeechRecognition();
+// At the top of your DemoPage component
+const [prompt, setPrompt] = useState("");
+
+// Fetch the prompt inside a useEffect hook
+useEffect(() => {
+  const fetchPrompt = async () => {
+    const res = await fetch("/api/prompt");
+    const data = await res.json();
+    setPrompt(data.prompt);
+    console.log("Prompt:", data.prompt); // Log the prompt
+  };
+
+  fetchPrompt();
+}, []);
+
+  const handleMessageSend = async () => {
+    if (messageText.trim() !== "") {
+      setMessages((messages) => [...messages, { text: messageText, sender: "user" }]);
+      setMessageText("");
+      try {
+        const completion = await openai.createChatCompletion({
+          model: "gpt-3.5-turbo-16k",
+          temperature: 0.3,
+          "n": 1,
+          presence_penalty:-1,
+          stop:"END OF CASE INTERVIEW",
+          messages: [
+            {
+              role: "system",
+              content: prompt,
+            },
+            { role: "user", content: messageText },
+          ],
+        });
+        if (completion.data && completion.data.choices && completion.data.choices.length > 0) {
+          const botResponse = completion.data.choices[0]?.message?.content?.trim();
+          if (botResponse) {
+            setMessages((messages) => [...messages, { text: botResponse, sender: "other" }]);
+          }
+        }
+      } catch (err) {
+        console.error("Error while sending message to GPT-3.5-turbo:", err);
+      }
+      return true;
+    }
+    return false;
+  };
 
   useEffect(() => {
     if (srListening) {
@@ -36,11 +83,17 @@ export default function DemoPage() {
     if (!listening) {
       SpeechRecognition.startListening({ continuous: true });
       setListening(true);
+      setLastTranscriptTime(Date.now()); // set last transcript time when it starts listening
     } else {
-      SpeechRecognition.stopListening();
-      setListening(false);
+      if (transcript.trim() !== "") {
+        SpeechRecognition.stopListening();
+        setListening(false);
+        handleMessageSend();
+        resetTranscript();
+      }
     }
   };
+  
 
   useEffect(() => {
     if (srListening) {
@@ -51,57 +104,36 @@ export default function DemoPage() {
       if (elapsedTime >= 1500 && listening) {
         SpeechRecognition.stopListening();
         setListening(false);
-        handleMessageSend(); // call the send message function
+        handleMessageSend();
       }
     }
   }, [transcript, srListening, lastTranscriptTime, listening]);
-
   useEffect(() => {
-    if (messageText.trim() !== "") {
-      inactivityTimer = setInterval(() => {
-        const elapsedTime = Date.now() - lastTranscriptTime;
-        if (elapsedTime >= 1500 && listening) {
+    if (listening) {
+      // Clear any existing timer
+      clearTimeout(inactivityTimer);
+
+      // Set up a new timer
+      inactivityTimer = setTimeout(() => {
+        if (listening) {
+          // Stop listening if we're still in listening state
           SpeechRecognition.stopListening();
           setListening(false);
-          clearInterval(inactivityTimer);
-          handleMessageSend();
-        }
-      }, 1000);
-    }
 
-    return () => clearInterval(inactivityTimer);
-  }, [lastTranscriptTime, listening, messageText]);
-
-  const handleMessageSend = async () => {
-    if (messageText.trim() !== "") {
-      // Add the user's message to the chat history
-      setMessages((messages) => [...messages, { text: messageText, sender: "user" }]);
-      setMessageText("");
-      try {
-        const completion = await openai.createChatCompletion({
-          model: "gpt-3.5-turbo-16k",
-          messages: [
-            {
-              role: "system",
-              content:
-                "",
-            },
-            { role: "user", content: messageText },
-          ],
-        });
-
-        // If there is a bot response, add it to the chat history
-        if (completion.data && completion.data.choices && completion.data.choices.length > 0) {
-          const botResponse = completion.data.choices[0]?.message?.content?.trim();
-          if (botResponse) {
-            setMessages((messages) => [...messages, { text: botResponse, sender: "other" }]);
+          // Send the message if there's any
+          if (messageText.trim() !== "") {
+            handleMessageSend();
           }
+
+          // Reset the transcript
+          resetTranscript();
         }
-      } catch (err) {
-        console.error("Error while sending message to GPT-3.5-turbo:", err);
-      }
+      }, 1500); // After 1.5 seconds of inactivity
     }
-  };
+    
+    // Clean up timer when component unmounts
+    return () => clearTimeout(inactivityTimer);
+  }, [transcript, srListening]); // Adjust this line to fit your needs
 
   return (
     <div className="h-screen flex flex-col items-center justify-center bg-black">
@@ -159,6 +191,7 @@ export default function DemoPage() {
                 stroke={listening ? "red" : "currentColor"}
                 className="w-6 h-6"
                 onClick={handleMicClick}
+                style={{ cursor: "pointer" }}
               >
                 <path
                   strokeLinecap="round"
