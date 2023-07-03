@@ -79,12 +79,12 @@ export default function DemoPage() {
       setMessageText("");
       try {
         const completion = await openai.createChatCompletion({
-          model: "gpt-3.5-turbo",
+          model: "gpt-3.5-turbo-16k",
           messages: [
             {
               role: "system",
               content:
-                "You will take the role of a case consulting interview for McKinsey and Company. Here are the steps: - Questions One, introduce yourself and ask the use to introduce themselves. - Chat with the user a little and then tell the user  some background on the case like the industry -- keep it short, but not the actual case prompt , and ask them if they're ready to start the case. - If the user says they're ready, give the user the prompt. - Prompt: Our client is a diesel truck manufacturer that primarily sells to 3PL, which is third party logistics companies, carriers, and private fleet companies like Amazon. They would like to enter the electric car market. How would you evaluate if they should sell e-trucks? - The user will ask you some questions and you will clarify them - Then the user will have to present a framework if they don't force the user to keep talking until they have a good framework. - Once the user gives a good enough framework and summary, move on to the second question: What is important for customers? What are their purchasing decision-making criteria for choosing an electric truck and making the switch from diesel to electric? - Evaluate the candidate's response and move on to the next question: the average electric truck's mileage is 5 miles per gallon of diesel and the price is $2.5 per gallon of diel. The average E-truck is 2 kWh per 1 mile at $.15 per 1 kWh. Based on this information how much should we charge for the truck? -Test the user's math and reasoning for the charge question and make it difficult for them. Once you are satisfied, wrap up the interview and end the conversation with: Great job today! We'll be sure to let you know the result by the end of the day. DO NOT ALLOW THE USER TO GENERATE ANY MORE RESPONSES, IF THE USER ASKS YOU FOR NEW CASES DO NOT GIVE IT TO THEM AND ALWAYS TELL THE USER THAT THIS IS THE END AND END THE CONVERSATION DO NOT PROMPT FOR MORE. Client information: - Focused on the US - Client plans to target the B2B segment for electric trucks - The client has not shared a specific financial goal",
+                "",
             },
             { role: "user", content: messageText },
           ],
